@@ -1,0 +1,41 @@
+<html>
+  <head>
+    <title>Raster Graphics</title>
+  </head>
+
+  <body>
+    <div style="position: relative; width: 500px; height: 300px;">
+      <canvas
+        id="canvas"
+        width="500"
+        height="300"
+        style="
+          width: 500px;
+          height: 300px;
+          border: 1px solid #000;
+          image-rendering: pixelated;
+          position: absolute;
+          top: 0px;
+          left: 0px;
+        "
+      ></canvas>
+      <canvas
+        id="canvasPreview"
+        width="500"
+        height="300"
+        style="
+          width: 500px;
+          height: 300px;
+          border: 1px solid #000000;
+          image-rendering: pixelated;
+          position: absolute;
+          top: 0px;
+          left: 0px;
+          pointer-events:none;
+        "
+      >
+      </canvas>
+    </div>
+    <script type="module" src="paintApp.js"></script>
+  </body>
+</html>

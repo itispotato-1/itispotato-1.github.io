@@ -1,0 +1,308 @@
+<!doctype html>
+<html>
+  <head>
+    <title>PBR Shader</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div
+      id="loading-screen"
+      style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #0a0a1a;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        color: white;
+        font-family: sans-serif;
+        transition: opacity 0.5s;
+      "
+    >
+      <div>Loading Scene PBR Shader...</div>
+      <div
+        style="
+          width: 300px;
+          height: 8px;
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 4px;
+          overflow: hidden;
+          margin-top: 15px;
+        "
+      >
+        <div
+          id="loading-bar"
+          style="
+            height: 100%;
+            width: 0%;
+            background: #4fc3f7;
+            transition: width 0.3s;
+          "
+        ></div>
+      </div>
+      <div
+        id="loading-text"
+        style="font-size: 14px; margin-top: 10px; opacity: 0.7"
+      >
+        0 / 0
+      </div>
+    </div>
+    <!-- core three.js -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/EXRLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.19"></script>
+
+    <script>
+      const manager = new THREE.LoadingManager();
+
+      manager.onProgress = (url, loaded, total) => {
+        const percent = (loaded / total) * 100;
+        document.getElementById("loading-bar").style.width = percent + "%";
+        document.getElementById("loading-text").textContent =
+          `${loaded} / ${total}`;
+      };
+
+      manager.onLoad = () => {
+        const loadingScreen = document.getElementById("loading-screen");
+        loadingScreen.style.opacity = "0";
+        setTimeout(() => (loadingScreen.style.display = "none"), 500);
+      };
+      const lightParams = {
+        autoRotate: true,
+        angle: 0, // มุมตอนควบคุมเอง (องศา)
+        radius: 4,
+        speed: 1,
+        height: 2,
+        intensity: 10,
+      };
+      const gui = new lil.GUI();
+      gui.domElement.style.position = "absolute";
+      gui.domElement.style.top = "10px";
+      gui.domElement.style.left = "10px";
+
+      gui.add(lightParams, "autoRotate").name("Auto Rotate");
+      gui.add(lightParams, "angle", 0, 360, 1).name("Manual Angle");
+      gui.add(lightParams, "radius", 1, 10, 0.1).name("Radius");
+      gui.add(lightParams, "speed", 0, 5, 0.1).name("Speed");
+      gui.add(lightParams, "height", 0, 10, 0.1).name("Height");
+      gui.add(lightParams, "intensity", 0, 50, 0.1).name("intensity");
+
+      const renderer = new THREE.WebGLRenderer(manager);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true; // Shadow
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      //   renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      //   renderer.toneMappingExposure = 0.5; // ค่ายิ่งน้อยยิ่งมืด (ปกติ 1.0)
+      document.body.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+
+      const camera = new THREE.PerspectiveCamera(
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000,
+      );
+      camera.position.set(0, 2, 5);
+      camera.lookAt(0, 0, 0);
+      const controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+      const abmientLight = new THREE.AmbientLight(0x404040, 1); // soft white light
+      scene.add(abmientLight);
+
+      scene.fog = new THREE.Fog(0xcccccc, 10, 50);
+
+      const color = 0xffffff;
+      const intensity = 15;
+      const light = new THREE.PointLight(color, intensity);
+      light.position.set(3, 3, 0);
+      scene.add(light);
+
+      const exrSkyboxUrl = "/coures/2dPicture/winter_lake_01_4k.exr";
+      const pmremGenerator = new THREE.PMREMGenerator(renderer);
+      pmremGenerator.compileEquirectangularShader();
+
+      new THREE.EXRLoader(manager).setDataType(THREE.UnsignedByteType).load(
+        exrSkyboxUrl,
+        (texture) => {
+          const skybox = pmremGenerator.fromEquirectangular(texture).texture;
+          scene.background = skybox;
+          scene.environment = skybox;
+
+          texture.dispose();
+          pmremGenerator.dispose();
+        },
+        undefined,
+        (error) => {
+          console.error("Unable to load EXR skybox:", error);
+        },
+      );
+
+      //ใส่พื้น
+      const texFloor = new THREE.TextureLoader(manager).load(
+        "/coures/2dPicture/snow.jpg",
+        (t) => {},
+      );
+      const matFloor = new THREE.MeshStandardMaterial({
+        map: texFloor,
+        doubleSided: true,
+      });
+      const planeGeometry = new THREE.PlaneGeometry(10, 10);
+      const plane = new THREE.Mesh(planeGeometry, matFloor);
+      plane.rotation.x = -Math.PI / 2;
+      plane.receiveShadow = true;
+
+      scene.add(plane);
+
+      //basic shaer sphere
+      const sphereGeometry = new THREE.SphereGeometry(0.3, 48, 48);
+      const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+      const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+      sphere.position.set(3, 3, 0);
+      //   sphere.castShadow = true;
+      scene.add(sphere);
+
+      // //basic Lambert sphere
+      // const lambertGeometry = new THREE.SphereGeometry(0.5, 32, 32)
+      // const lambertMaterial = new THREE.MeshLambertMaterial({ color: 0x3b82f6 })
+      // const lambert = new THREE.Mesh(lambertGeometry, lambertMaterial)
+      // lambert.position.set(-2, 1, 1)
+      // lambert.castShadow = true
+      // scene.add(lambert)
+
+      // //basic Phong sphere
+      // const phongGeometry = new THREE.SphereGeometry(0.5, 32, 32)
+      // const phongMaterial = new THREE.MeshPhongMaterial({ color: 0xffff00, shininess: 100 })
+      // const phong = new THREE.Mesh(phongGeometry, phongMaterial)
+      // phong.position.set(3, 3, 0)
+      // phong.castShadow = true
+      // scene.add(phong)
+
+      // //basic PBR sphere
+      const PBRGeometry = new THREE.SphereGeometry(1.2, 32, 32);
+      const PBRMaterial = new THREE.MeshStandardMaterial({
+        color: 0xd6fffa,
+        metalness: 0,
+        roughness: 0.0,
+      });
+      const PBR = new THREE.Mesh(PBRGeometry, PBRMaterial);
+      PBR.position.set(-4, 0.5, 3);
+      PBR.castShadow = true;
+      scene.add(PBR);
+      const PBR2 = new THREE.Mesh(PBRGeometry, PBRMaterial);
+      PBR2.position.set(-3, 0.5, 4);
+      PBR2.castShadow = true;
+      scene.add(PBR2);
+      const PBR3 = new THREE.Mesh(PBRGeometry, PBRMaterial);
+      PBR3.position.set(-4, 1.5, 4);
+      PBR3.castShadow = true;
+      scene.add(PBR3);
+
+      //load glb และใช้ pbr material
+      const loader = new THREE.GLTFLoader(manager);
+      loader.load(
+        "https://itispotato-1.github.io/coures/3dmodel/braum_shield.glb",
+        (gltf) => {
+          const model = gltf.scene;
+          model.traverse((child) => {
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+          model.scale.set(0.1, 0.1, 0.1);
+          model.position.set(0, 0, 0);
+          scene.add(model);
+        },
+      );
+      //   const loaderEnv = new THREE.GLTFLoader();
+      //   loaderEnv.load(
+      //     "https://itispotato-1.github.io/coures/3dmodel/iceCastles.glb",
+      //     (gltf) => {
+      //       const model = gltf.scene;
+      //       model.traverse((child) => {
+      //         if (child.isMesh) {
+      //           child.castShadow = true;
+      //           child.receiveShadow = true;
+      //         }
+      //       });
+      //       model.scale.set(3, 3, 3);
+      //       model.position.set(0, 1, -10);
+      //       scene.add(model);
+      //     },
+      //   );
+
+      const loaderEnv2 = new THREE.GLTFLoader(manager);
+      loaderEnv2.load(
+        "https://itispotato-1.github.io/coures/3dmodel/stylizedIce.glb",
+        (gltf) => {
+          const model = gltf.scene;
+          model.traverse((child) => {
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+          model.scale.set(0.01, 0.01, 0.01);
+          model.position.set(0, -0.4, 0);
+          scene.add(model);
+        },
+      );
+
+      let currentAngle = 0; // เก็บมุมปัจจุบันไว้เสมอ (หน่วยองศา)
+      let lastTime = 0; // เวลาเฟรมก่อนหน้า สำหรับหา delta time
+
+      function animate(t) {
+        const dt = (t - lastTime) / 1000; // วินาทีที่ผ่านไปตั้งแต่เฟรมก่อน
+        lastTime = t;
+
+        if (lightParams.autoRotate) {
+          // หมุนต่อจากมุมเดิม ไม่ใช่คำนวณจาก t ทั้งหมด
+          currentAngle += lightParams.speed * dt * 60; // *60 ปรับความเร็วให้ใกล้เคียงเดิม ปรับเลขนี้ได้ตามชอบ
+          currentAngle = currentAngle % 360;
+
+          // sync ให้ slider แสดงค่าล่าสุดตลอด (เผื่อ user เปิด panel ดูระหว่างหมุน)
+          lightParams.angle = currentAngle;
+          //   angleController.updateDisplay();
+        } else {
+          // โหมด manual: ใช้ค่าจาก slider ตรงๆ
+          currentAngle = lightParams.angle;
+        }
+
+        const angleRad = THREE.MathUtils.degToRad(currentAngle);
+        x = Math.cos(angleRad) * lightParams.radius;
+        y = lightParams.height;
+        z = Math.sin(angleRad) * lightParams.radius;
+
+        light.position.x = x;
+        light.position.z = z;
+        light.position.y = y;
+
+        sphere.position.set(x, y, z);
+        scene.add(sphere);
+
+        light.intensity = lightParams.intensity;
+
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+      }
+      animate(0);
+
+      window.addEventListener("keydown", (event) => {});
+    </script>
+  </body>
+</html>

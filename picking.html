@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shader Starter • three.js r128</title>
+  <style>
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+    }
+
+    canvas {
+      display: block;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+
+<body>
+  <script>
+    // Scene / Camera / Renderer
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xffffff);
+    // scene.background = new THREE.TextureLoader().load('https://itispotato-1.github.io/coures/2dPicture/IMG20260907140633.jpg');
+
+    const camera = new THREE.PerspectiveCamera(
+      60,
+      innerWidth / innerHeight,
+      0.1,
+      100
+    );
+    camera.position.set(0, 0, 2.5);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+    // ค่าที่ส่งจาก JavaScript เข้า shader
+    const uniforms = {
+      uTime: { value: 0.0 },
+      uLightDir: { value: new THREE.Vector3(0.4, 1.0, 0.8).normalize() },
+      // uTexture: { value: new THREE.TextureLoader().load('https://itispotato-1.github.io/coures/2dPicture/IMG20260907140633.jpg') }
+      uTexture: { value: new THREE.TextureLoader().load('https://threejs.org/examples/textures/uv_grid_opengl.jpg') }
+    };
+
+    const vertexShader = `
+    uniform float uTime;
+
+    varying vec3 vNormal;
+    varying vec2 vUv;
+
+    void main() {
+      vUv = uv;
+
+      vec3 pos = position;
+      vNormal = normal;
+
+      // เริ่มเขียน vertex shader ที่นี่
+      pos.z += sin(pos.x * 5.0 + uTime) * 0.1;
+
+      // gl_Position = vec4(pos, 1.0);
+      // gl_Position = modelMatrix * vec4(pos, 1.0);
+      // gl_Position = viewMatrix * modelMatrix * vec4(pos, 1.0);
+      // gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(pos, 1.0);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+  `;
+
+    const fragmentShader = `
+  precision mediump float;
+  
+  uniform float uTime;
+  uniform sampler2D uTexture;
+  uniform vec3 uLightDir;
+  
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  
+  void main() {
+    vec3 color = texture2D(uTexture,vUv).rgb;
+    //lambert diffuse shadder
+      vec3 N = normalize(vNormal);
+      vec3 L = normalize(uLightDir);
+      float diffuse = max(dot(N,L),0.0);
+      
+      //ambient
+      float ambient = 0.3;
+      
+      // float level = 3.0;
+      // diffuse = floor(diffuse *level)/level;
+      diffuse = smoothstep(0.15,0.2,diffuse);
+      color *= (diffuse + ambient);
+      
+      gl_FragColor = vec4(color, 1.0);
+      }
+      `;
+
+    const outlineVertexShader = `
+      uniform float uTime;
+    
+      varying vec3 vNormal;
+      varying vec2 vUv;
+    
+      void main() {
+        vUv = uv;
+    
+        vec3 pos = position;
+        vNormal = normal;
+
+        pos.z += sin(pos.x * 5.0 + uTime) * 0.1;
+        pos += (normal*0.08);
+  
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+      }
+    `;
+
+    const outlineFragmentShader = `
+    varying vec3 vNormal;
+
+    void main() {
+      gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    }
+  `;
+
+    const outlineMaterial = new THREE.ShaderMaterial({
+      vertexShader: outlineVertexShader,
+      fragmentShader: outlineFragmentShader,
+      uniforms,
+      side: THREE.BackSide
+    });
+
+    // ใช้ segment หลายช่อง เพื่อให้ vertex shader ดัดรูปทรงได้ละเอียด
+    const geometry = new THREE.TorusKnotBufferGeometry(0.5, 0.2, 128, 32);
+    const material = new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader,
+      uniforms,
+      side: THREE.DoubleSide
+    });
+
+    const pickables = [];
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    let picked_object = null;
+
+    renderer.domElement.addEventListener('click', onPick);
+    function onPick(e) {
+      const r = renderer.domElement.getBoundingClientRect();
+      const x = (e.clientX ?? e.touches[0].clientX) - r.left;
+      const y = (e.clientY ?? e.touches[0].clientY) - r.top;
+      pointer.x = (x / r.width) * 2 - 1;
+      pointer.y = -(y / r.height) * 2 + 1;
+
+      raycaster.setFromCamera(pointer, camera);
+      const hit = raycaster.intersectObjects(pickables, false)[0];
+      if (hit == null) {
+        picked_object = null;
+        return;
+      }
+      picked_object = hit.object;
+      console.log('Picked object:', hit.object.name);
+    }
+
+    function addPickableObject(name, geometry, position) {
+      const mesh = new THREE.Mesh(geometry, material);
+      scene.add(mesh);
+      mesh.name = name;
+      mesh.position.copy(position);
+
+      const OutlineMesh = new THREE.Mesh(geometry, outlineMaterial);
+      scene.add(OutlineMesh);
+      mesh.add(OutlineMesh);
+      pickables.push(mesh)
+
+      return (mesh);
+    }
+
+    addPickableObject('TorusKnot', geometry, new THREE.Vector3(0, 0, 0));
+    addPickableObject('Cube', new THREE.BoxGeometry(1.0, 1.0, 1.0), new THREE.Vector3(-2, 0, 0));
+
+    const sphere = addPickableObject('Sphere', new THREE.SphereGeometry(0.5, 32, 32), new THREE.Vector3(2, 0, 0));
+    const cone = addPickableObject('Cone', new THREE.ConeBufferGeometry(0.5, 1.0, 32), new THREE.Vector3(0, 0, -2))
+    const cylinder = addPickableObject('Cylinder', new THREE.CylinderBufferGeometry(0.3, 0.3, 1.0, 32), new THREE.Vector3(0, 0, 2));
+    function lerp(a, b, t) {
+      return (1.0 - t) * a + (b * t);
+    }
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    });
+
+    function animate(time) {
+      uniforms.uTime.value = time * 0.001;
+
+      cone.position.x = lerp(-2.0, 2.0, Math.sin(time * 0.001) * 0.5 + 0.5);
+      sphere.position.z = lerp(-2.0, 2.0, Math.sin(time * 0.001) * 0.5 + 0.5);
+      cylinder.position.x = lerp(sphere.position.x, cone.position.x, Math.sin(time * 0.005) * 0.5 + 0.5);
+      cylinder.position.z = lerp(sphere.position.z, cone.position.z, Math.sin(time * 0.005) * 0.5 + 0.5);
+
+      if (picked_object) {
+        // controls.target = picked_object.position;
+        controls.target.lerp(picked_object.position, 0.1);
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+
+</html>

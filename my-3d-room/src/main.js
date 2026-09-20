@@ -54,7 +54,6 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0.5, 0);
 controls.enableDamping = true;
 
-
 scene.add(new THREE.AmbientLight(0x404040, 1));
 const light = new THREE.PointLight(0xffffff, 15);
 light.castShadow = true;
@@ -64,7 +63,7 @@ const sun = new THREE.DirectionalLight(0xffffff, 3);
 sun.castShadow = true;
 scene.add(sun);
 
-const exrSkyboxUrl = "/coures/2dPicture/sky1k.exr";
+const exrSkyboxUrl = `${import.meta.env.BASE_URL}coures/2dPicture/sky1k.exr`;
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 pmremGenerator.compileEquirectangularShader();
 
@@ -121,7 +120,7 @@ gui.add(lightParams, "height", 0, 10, 0.1).name("Height");
 gui.add(lightParams, "intensity", 0, 50, 0.1).name("Intensity");
 
 const loader = new GLTFLoader(manager);
-loader.load("/model/factoryV3Color.glb", (gltf) => {
+loader.load(`${import.meta.env.BASE_URL}model/factoryV3Color.glb`, (gltf) => {
   const model = gltf.scene;
   model.traverse((child) => {
     if (child.isMesh) {

@@ -57,11 +57,11 @@ controls.enableDamping = true;
 scene.add(new THREE.AmbientLight(0x404040, 1));
 const light = new THREE.PointLight(0xffffff, 15);
 light.castShadow = true;
-scene.add(light);
+// scene.add(light);
 
 const sun = new THREE.DirectionalLight(0xffffff, 3);
 sun.castShadow = true;
-scene.add(sun);
+// scene.add(sun);
 
 const exrSkyboxUrl = `${import.meta.env.BASE_URL}coures/2dPicture/sky1k.exr`;
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
@@ -72,7 +72,7 @@ new EXRLoader(manager).setDataType(THREE.HalfFloatType).load(
   (texture) => {
     const skybox = pmremGenerator.fromEquirectangular(texture).texture;
     scene.background = skybox;
-    scene.environment = skybox;
+    // scene.environment = skybox;
 
     texture.dispose();
     pmremGenerator.dispose();
@@ -95,49 +95,53 @@ floor.rotation.x = -Math.PI / 2;
 floor.receiveShadow = true;
 scene.add(floor);
 
-const lightMarker = new THREE.Mesh(
-  new THREE.SphereGeometry(0.3, 32, 32),
-  new THREE.MeshBasicMaterial({ color: 0xffff00 }),
-);
-scene.add(lightMarker);
-
-const lightParams = {
-  autoRotate: true,
-  angle: 0,
-  radius: 4,
-  speed: 1,
-  height: 2,
-  intensity: 10,
-};
-const gui = new GUI({ title: "PBR Light" });
-gui.domElement.style.setProperty("top", "10px");
-gui.domElement.style.setProperty("left", "10px");
-gui.add(lightParams, "autoRotate").name("Auto Rotate");
-gui.add(lightParams, "angle", 0, 360, 1).name("Manual Angle");
-gui.add(lightParams, "radius", 1, 10, 0.1).name("Radius");
-gui.add(lightParams, "speed", 0, 5, 0.1).name("Speed");
-gui.add(lightParams, "height", 0, 10, 0.1).name("Height");
-gui.add(lightParams, "intensity", 0, 50, 0.1).name("Intensity");
-
+const clock = new THREE.Clock();
+let mixer;
 const loader = new GLTFLoader(manager);
-loader.load(`${import.meta.env.BASE_URL}model/factoryV3Color.glb`, (gltf) => {
-  const model = gltf.scene;
-  model.traverse((child) => {
-    if (child.isMesh) {
-      child.castShadow = false;
-      child.receiveShadow = true;
-    }
-  });
-  model.scale.setScalar(0.8);
-  model.position.set(0, 0.5, 0);
-  model.rotation.y = THREE.MathUtils.degToRad(140);
-  scene.add(model);
-});
+loader.load(
+  `${import.meta.env.BASE_URL}model/factoryV4ColorAnimate.glb`,
+  (gltf) => {
+    const model = gltf.scene;
+    model.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = false;
+        child.receiveShadow = true;
+      }
+    });
+    model.scale.setScalar(0.8);
+    model.position.set(0, 0.5, 0);
+    model.rotation.y = THREE.MathUtils.degToRad(140);
+    scene.add(model);
 
-let currentAngle = 0;
+    gltf.scene.traverse((object) => {
+      console.log(object.name, object.type);
+      if (object.name == "LEDfactory Mesh") {
+        console.log("พบ Cube:", object);
+      }
+    });
+
+    mixer = new THREE.AnimationMixer(model);
+
+    const gearRoatateClip = THREE.AnimationClip.findByName(
+      gltf.animations,
+      "gearRotate",
+    );
+    const transportClip = THREE.AnimationClip.findByName(
+      gltf.animations,
+      "transportRotate",
+    );
+
+    if (gearRoatateClip) mixer.clipAction(gearRoatateClip).play();
+    if (transportClip) mixer.clipAction(transportClip).play();
+  },
+);
+
 let lastTime = 0;
 
 function animate(time) {
+  const delta = clock.getDelta();
+  if (mixer) mixer.update(delta);
+
   const deltaTime = lastTime ? (time - lastTime) / 1000 : 0;
   lastTime = time;
 
@@ -147,18 +151,6 @@ function animate(time) {
     camera.position.lerpVectors(startPosition, targetPosition, cameraIntro);
   }
 
-  if (lightParams.autoRotate) {
-    currentAngle = (currentAngle + lightParams.speed * deltaTime * 60) % 360;
-    lightParams.angle = currentAngle;
-  } else {
-    currentAngle = lightParams.angle;
-  }
-  const angle = THREE.MathUtils.degToRad(currentAngle);
-  const x = Math.cos(angle) * lightParams.radius;
-  const z = Math.sin(angle) * lightParams.radius;
-  light.position.set(x, lightParams.height, z);
-  lightMarker.position.copy(light.position);
-  light.intensity = lightParams.intensity;
   controls.update();
   renderer.render(scene, camera);
   requestAnimationFrame(animate);

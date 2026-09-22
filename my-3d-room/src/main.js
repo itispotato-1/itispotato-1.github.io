@@ -63,7 +63,7 @@ const sun = new THREE.DirectionalLight(0xffffff, 3);
 sun.castShadow = true;
 // scene.add(sun);
 
-const exrSkyboxUrl = `${import.meta.env.BASE_URL}coures/2dPicture/sky1k.exr`;
+const exrSkyboxUrl = `${import.meta.env.BASE_URL}coures/2dPicture/puresky.exr`;
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 pmremGenerator.compileEquirectangularShader();
 

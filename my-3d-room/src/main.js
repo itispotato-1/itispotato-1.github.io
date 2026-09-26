@@ -37,7 +37,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0a1a);
+scene.background = new THREE.Color(0x6633ff);
 
 const camera = new THREE.PerspectiveCamera(
   75,
@@ -65,34 +65,37 @@ const sun = new THREE.DirectionalLight(0xffffff, 0.1);
 sun.castShadow = true;
 scene.add(sun);
 
-const exrSkyboxUrl = `${import.meta.env.BASE_URL}coures/2dPicture/sky1k.exr`;
-const pmremGenerator = new THREE.PMREMGenerator(renderer);
-pmremGenerator.compileEquirectangularShader();
+// const exrSkyboxUrl = `${import.meta.env.BASE_URL}coures/2dPicture/sky1k.exr`;
+// const pmremGenerator = new THREE.PMREMGenerator(renderer);
+// pmremGenerator.compileEquirectangularShader();
 
-new EXRLoader(manager).setDataType(THREE.HalfFloatType).load(
-  exrSkyboxUrl,
-  (texture) => {
-    const skybox = pmremGenerator.fromEquirectangular(texture).texture;
-    scene.background = skybox;
-    // scene.environment = skybox;
+// new EXRLoader(manager).setDataType(THREE.HalfFloatType).load(
+//   exrSkyboxUrl,
+//   (texture) => {
+//     const skybox = pmremGenerator.fromEquirectangular(texture).texture;
+//     scene.background = skybox;
+//     // scene.environment = skybox;
 
-    texture.dispose();
-    pmremGenerator.dispose();
-  },
-  undefined,
-  (error) => {
-    console.error("Unable to load EXR skybox:", error);
-  },
-);
+//     texture.dispose();
+//     pmremGenerator.dispose();
+//   },
+//   undefined,
+//   (error) => {
+//     console.error("Unable to load EXR skybox:", error);
+//   },
+// );
 
 const textureLoader = new THREE.TextureLoader();
 
-// const screens = {
-//   home: textureLoader.load("/screens/screen-home.png"),
-//   project: textureLoader.load("/screens/screen-project.png"),
-//   about: textureLoader.load("/screens/screen-about.png"),
-//   game: textureLoader.load("/screens/screen-game.png"),
-// };
+const screens = {
+  portfoilo: textureLoader.load(
+    `${import.meta.env.BASE_URL}coures/2dPicture/portfolio.png`,
+  ),
+};
+screens.portfoilo.colorSpace = THREE.SRGBColorSpace;
+screens.portfoilo.center.set(0.5, 0.5);
+screens.portfoilo.rotation = -Math.PI / 2;
+screens.portfoilo.repeat.y = -1;
 
 // --------------------- VIDEO -------------------------
 const video = document.createElement("video");
@@ -218,6 +221,7 @@ let sign1 = null;
 let sign2 = null;
 let sign3 = null;
 let monitor = null;
+let TopFactoryAction = null;
 
 const loader = new GLTFLoader(manager);
 loader.load(
@@ -253,13 +257,30 @@ loader.load(
         sign3 = object;
         can_picking.push(object);
       }
+      if (object.name == "TopFactory") {
+        can_picking.push(object);
+      }
       if (object.name == "Monitor001") {
         monitor = object;
+        monitor.material = new THREE.MeshBasicMaterial({
+          map: screens.portfoilo,
+        });
         can_picking.push(object);
       }
     });
 
     mixer = new THREE.AnimationMixer(model);
+
+    const TopFactoryClip = THREE.AnimationClip.findByName(
+      gltf.animations,
+      "TopFactoryRotate",
+    );
+
+    if (TopFactoryClip) {
+      TopFactoryAction = mixer.clipAction(TopFactoryClip);
+      TopFactoryAction.setLoop(THREE.LoopOnce, 1);
+      TopFactoryAction.clampWhenFinished = true;
+    }
 
     const gearRoatateClip = THREE.AnimationClip.findByName(
       gltf.animations,
@@ -269,9 +290,38 @@ loader.load(
       gltf.animations,
       "transportRotate",
     );
+    const packetClip1 = THREE.AnimationClip.findByName(
+      gltf.animations,
+      "packet1",
+    );
+    const packetClip2 = THREE.AnimationClip.findByName(
+      gltf.animations,
+      "packet2",
+    );
+
+    const ItemDownClip = THREE.AnimationClip.findByName(
+      gltf.animations,
+      "ItemDown",
+    );
 
     if (gearRoatateClip) mixer.clipAction(gearRoatateClip).play();
     if (transportClip) mixer.clipAction(transportClip).play();
+    if (ItemDownClip) mixer.clipAction(ItemDownClip).play();
+    if (packetClip1 && packetClip2) {
+      const packetAction1 = mixer.clipAction(packetClip1);
+      const packetAction2 = mixer.clipAction(packetClip2);
+      packetAction1.setLoop(THREE.LoopOnce, 1);
+      packetAction2.setLoop(THREE.LoopRepeat, Infinity);
+      packetAction1.clampWhenFinished = true;
+
+      mixer.addEventListener("loop", (event) => {
+        if (event.action === packetAction2 && !packetAction1.isRunning()) {
+          packetAction1.reset().play();
+        }
+      });
+
+      packetAction2.play();
+    }
   },
 );
 
@@ -283,6 +333,9 @@ const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let picked_object = null;
 let returningHome = false;
+controls.addEventListener("start", () => {
+  returningHome = false;
+});
 renderer.domElement.addEventListener("click", onPick);
 function onPick(e) {
   const r = renderer.domElement.getBoundingClientRect();
@@ -292,7 +345,8 @@ function onPick(e) {
   pointer.y = -(y / r.height) * 2 + 1;
 
   raycaster.setFromCamera(pointer, camera);
-  const hit = raycaster.intersectObjects(can_picking, false)[0];
+  const hit = raycaster.intersectObjects(can_picking, true)[0];
+
   if (hit == null) {
     if (picked_object != null) {
       returningHome = true;
@@ -300,14 +354,27 @@ function onPick(e) {
     picked_object = null;
     return;
   }
-  picked_object = hit.object;
+  let targetObject = hit.object;
+  while (targetObject && !can_picking.includes(targetObject)) {
+    targetObject = targetObject.parent;
+  }
+  if (!targetObject) return;
+
+  console.log("check", targetObject.name);
+
+  if (targetObject.name === "TopFactory") {
+    if (TopFactoryAction) {
+      TopFactoryAction.reset();
+      TopFactoryAction.play();
+      console.log("check");
+
+      return;
+    }
+  }
+  picked_object = targetObject;
 
   const worldPosition = new THREE.Vector3();
   picked_object.getWorldPosition(worldPosition);
-
-  
-  // console.log("Picked:", picked_object.name);
-  // console.log("World position:", worldPosition);
 }
 
 let lastTime = 0;
@@ -356,8 +423,6 @@ function animate(time) {
 
     if (camera.position.distanceTo(targetPosition) < 0.5) {
       returningHome = false;
-      console.log("check");
-      
     }
   }
 

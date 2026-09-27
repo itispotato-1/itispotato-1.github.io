@@ -100,42 +100,50 @@ screens.portfoilo.repeat.y = -1;
 // --------------------- VIDEO -------------------------
 const video = document.createElement("video");
 
+video.src = `${import.meta.env.BASE_URL}video/game.mp4`;
 video.muted = true;
+video.loop = true;
 video.playsInline = true;
 
-const videoTexture = new THREE.VideoTexture(video);
-videoTexture.colorSpace = THREE.SRGBColorSpace;
-videoTexture.center.set(0.5, 0.5);
-videoTexture.rotation = Math.PI / 2;
-videoTexture.repeat.set(0.8, 0.8);
-videoTexture.offset.set(0.1, 0.1);
-videoTexture.wrapS = THREE.ClampToEdgeWrapping;
-videoTexture.wrapT = THREE.ClampToEdgeWrapping;
+const gameVideoTexture = new THREE.VideoTexture(video);
+gameVideoTexture.colorSpace = THREE.SRGBColorSpace;
+gameVideoTexture.center.set(0.5, 0.5);
+gameVideoTexture.rotation = Math.PI / 2;
+gameVideoTexture.repeat.set(4, 4);
+gameVideoTexture.offset.set(1.5, 0.05);
+gameVideoTexture.wrapS = THREE.ClampToEdgeWrapping;
+gameVideoTexture.wrapT = THREE.ClampToEdgeWrapping;
 
-const videoList = [
-  `${import.meta.env.BASE_URL}video/game1.mp4`,
-  `${import.meta.env.BASE_URL}video/game2.mp4`,
-];
+const studentVideo = document.createElement("video");
+studentVideo.src = `${import.meta.env.BASE_URL}video/student.mp4`;
+studentVideo.muted = true;
+studentVideo.loop = true;
+studentVideo.playsInline = true;
 
-let currentVideo = 0;
+const studentVideoTexture = new THREE.VideoTexture(studentVideo);
+studentVideoTexture.colorSpace = THREE.SRGBColorSpace;
+studentVideoTexture.center.set(0.5, 0.5);
+studentVideoTexture.rotation = Math.PI / 2;
+studentVideoTexture.repeat.set(4,4);
+studentVideoTexture.offset.set(1.5, 0.05);
+studentVideoTexture.wrapS = THREE.ClampToEdgeWrapping;
+studentVideoTexture.wrapT = THREE.ClampToEdgeWrapping;
 
-function playVideo(index) {
-  currentVideo = index;
+const karaokeVideo = document.createElement("video");
+karaokeVideo.src = `${import.meta.env.BASE_URL}video/karaoke.mp4`;
+karaokeVideo.muted = true;
+karaokeVideo.loop = true;
+karaokeVideo.playsInline = true;
 
-  video.src = videoList[currentVideo];
-  video.load();
-  video.play();
-}
+const karaokeVideoTexture = new THREE.VideoTexture(karaokeVideo);
+karaokeVideoTexture.colorSpace = THREE.SRGBColorSpace;
+karaokeVideoTexture.center.set(0.5, 0.5);
+karaokeVideoTexture.rotation = -Math.PI / 2;
+karaokeVideoTexture.repeat.set(5, -5);
+karaokeVideoTexture.offset.set(0.6, 0);
+karaokeVideoTexture.wrapS = THREE.ClampToEdgeWrapping;
+karaokeVideoTexture.wrapT = THREE.ClampToEdgeWrapping;
 
-video.addEventListener("ended", () => {
-  currentVideo++;
-
-  if (currentVideo >= videoList.length) {
-    currentVideo = 0;
-  }
-
-  playVideo(currentVideo);
-});
 // --------------------- VIDEO -------------------------
 
 const uniforms = {
@@ -244,17 +252,32 @@ loader.load(
       if (object.name == "signLED1") {
         sign1 = object;
         sign1.material = new THREE.MeshBasicMaterial({
-          map: videoTexture,
+          map: gameVideoTexture,
         });
-        playVideo(0);
+        video.play().catch((error) => {
+          console.error("Unable to play game video:", error);
+        });
         can_picking.push(object);
       }
       if (object.name == "signLED2") {
         sign2 = object;
+        sign2.material = new THREE.MeshBasicMaterial({
+          map: studentVideoTexture,
+        });
+        studentVideo.play().catch((error) => {
+          console.error("Unable to play student video:", error);
+        });
         can_picking.push(object);
       }
       if (object.name == "signLED3") {
         sign3 = object;
+        sign3.material = new THREE.MeshBasicMaterial({
+          map: karaokeVideoTexture,
+          side: THREE.DoubleSide,
+        });
+        karaokeVideo.play().catch((error) => {
+          console.error("Unable to play karaoke video:", error);
+        });
         can_picking.push(object);
       }
       if (object.name == "TopFactory") {
@@ -305,7 +328,20 @@ loader.load(
     );
 
     if (gearRoatateClip) mixer.clipAction(gearRoatateClip).play();
-    if (transportClip) mixer.clipAction(transportClip).play();
+    if (transportClip) {
+      const startTime = Math.min(
+        ...transportClip.tracks.map((track) => track.times[0]),
+      );
+      for (const track of transportClip.tracks) {
+        track.times = track.times.slice();
+        track.shift(-startTime);
+      }
+      transportClip.resetDuration();
+
+      const transportAction = mixer.clipAction(transportClip);
+      transportAction.setLoop(THREE.LoopRepeat, Infinity);
+      transportAction.play();
+    }
     if (ItemDownClip) mixer.clipAction(ItemDownClip).play();
     if (packetClip1 && packetClip2) {
       const packetAction1 = mixer.clipAction(packetClip1);
@@ -320,6 +356,7 @@ loader.load(
         }
       });
 
+      packetAction1.play();
       packetAction2.play();
     }
   },

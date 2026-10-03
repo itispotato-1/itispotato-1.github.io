@@ -124,7 +124,7 @@ const studentVideoTexture = new THREE.VideoTexture(studentVideo);
 studentVideoTexture.colorSpace = THREE.SRGBColorSpace;
 studentVideoTexture.center.set(0.5, 0.5);
 studentVideoTexture.rotation = Math.PI / 2;
-studentVideoTexture.repeat.set(4,4);
+studentVideoTexture.repeat.set(4, 4);
 studentVideoTexture.offset.set(1.5, 0.05);
 studentVideoTexture.wrapS = THREE.ClampToEdgeWrapping;
 studentVideoTexture.wrapT = THREE.ClampToEdgeWrapping;
@@ -315,11 +315,11 @@ loader.load(
     );
     const packetClip1 = THREE.AnimationClip.findByName(
       gltf.animations,
-      "packet1",
+      "hammerAction1",
     );
     const packetClip2 = THREE.AnimationClip.findByName(
       gltf.animations,
-      "packet2",
+      "hammerAction2",
     );
 
     const ItemDownClip = THREE.AnimationClip.findByName(
@@ -342,29 +342,13 @@ loader.load(
       transportAction.setLoop(THREE.LoopRepeat, Infinity);
       transportAction.play();
     }
+
     if (ItemDownClip) mixer.clipAction(ItemDownClip).play();
-    if (packetClip1 && packetClip2) {
-      const packetAction1 = mixer.clipAction(packetClip1);
-      const packetAction2 = mixer.clipAction(packetClip2);
-      packetAction1.setLoop(THREE.LoopOnce, 1);
-      packetAction2.setLoop(THREE.LoopRepeat, Infinity);
-      packetAction1.clampWhenFinished = true;
-
-      mixer.addEventListener("loop", (event) => {
-        if (event.action === packetAction2 && !packetAction1.isRunning()) {
-          packetAction1.reset().play();
-        }
-      });
-
-      packetAction1.play();
-      packetAction2.play();
-    }
+    if (packetClip1) mixer.clipAction(packetClip1).play();
+    if (packetClip2) mixer.clipAction(packetClip2).play();
+    // }
   },
 );
-
-// sign1.material = new THREE.MeshBasicMaterial({
-//   map: videoTexture,
-// });
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -401,10 +385,10 @@ function onPick(e) {
 
   if (targetObject.name === "TopFactory") {
     if (TopFactoryAction) {
+      if (TopFactoryAction.isRunning()) return;
+
       TopFactoryAction.reset();
       TopFactoryAction.play();
-      console.log("check");
-
       return;
     }
   }

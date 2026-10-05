@@ -185,14 +185,6 @@ const fragmentShader = `
     void main() {
       vec3 color = texture2D(uTexture, vUv).rgb;
       gl_FragColor = vec4(color, 1.0);
-
-      // เริ่มเขียน fragment shader ที่นี่
-      //vec3 color = vec3(vUv, 0.5);
-
-      
-      // vec3 color = vec3(0.1, 0.7, 0.9);
-
-      // gl_FragColor = vec4(color, 1.0);
     }
   `;
 
@@ -204,9 +196,6 @@ const material = new THREE.ShaderMaterial({
   uniforms,
   side: THREE.DoubleSide,
 });
-
-// const mesh = new THREE.Mesh(Planegeometry, material);
-// scene.add(mesh);
 
 const floor = new THREE.Mesh(
   new THREE.PlaneGeometry(10, 10, 64, 64),
@@ -236,41 +225,34 @@ loader.load(
   `${import.meta.env.BASE_URL}model/factoryV4ColorAnimate.glb`,
   (gltf) => {
     const model = gltf.scene;
+
     model.traverse((child) => {
       if (child.isMesh) {
         child.castShadow = false;
         child.receiveShadow = true;
       }
-    });
-    model.scale.setScalar(0.8);
-    model.position.set(0, 0.5, 0);
-    scene.add(model);
-
-    gltf.scene.traverse((object) => {
-      // console.log(object.name);
-
-      if (object.name == "signLED1") {
-        sign1 = object;
+      if (child.name == "signLED1") {
+        sign1 = child;
         sign1.material = new THREE.MeshBasicMaterial({
           map: gameVideoTexture,
         });
         video.play().catch((error) => {
           console.error("Unable to play game video:", error);
         });
-        can_picking.push(object);
+        can_picking.push(child);
       }
-      if (object.name == "signLED2") {
-        sign2 = object;
+      if (child.name == "signLED2") {
+        sign2 = child;
         sign2.material = new THREE.MeshBasicMaterial({
           map: studentVideoTexture,
         });
         studentVideo.play().catch((error) => {
           console.error("Unable to play student video:", error);
         });
-        can_picking.push(object);
+        can_picking.push(child);
       }
-      if (object.name == "signLED3") {
-        sign3 = object;
+      if (child.name == "signLED3") {
+        sign3 = child;
         sign3.material = new THREE.MeshBasicMaterial({
           map: karaokeVideoTexture,
           side: THREE.DoubleSide,
@@ -278,26 +260,35 @@ loader.load(
         karaokeVideo.play().catch((error) => {
           console.error("Unable to play karaoke video:", error);
         });
-        can_picking.push(object);
+        can_picking.push(child);
       }
-      if (object.name == "TopFactory") {
-        can_picking.push(object);
+      if (child.name == "TopFactory") {
+        can_picking.push(child);
       }
-      if (object.name == "Monitor001") {
-        monitor = object;
+      if (child.name == "Monitor001") {
+        monitor = child;
         monitor.material = new THREE.MeshBasicMaterial({
           map: screens.portfoilo,
         });
-        can_picking.push(object);
+        can_picking.push(child);
       }
     });
 
+    model.scale.setScalar(0.8);
+    model.position.set(0, 0.5, 0);
+    scene.add(model);
+
     mixer = new THREE.AnimationMixer(model);
 
-    const TopFactoryClip = THREE.AnimationClip.findByName(
-      gltf.animations,
-      "TopFactoryRotate",
-    );
+    const AnimClip = THREE.AnimationClip;
+    const anim = gltf.animations;
+
+    const TopFactoryClip = AnimClip.findByName(anim, "TopFactoryRotate");
+    const gearRoatateClip = AnimClip.findByName(anim, "gearRotate");
+    const transportClip = AnimClip.findByName(anim, "transportRotate");
+    const packetClip1 = AnimClip.findByName(anim, "hammerAction1");
+    const packetClip2 = AnimClip.findByName(anim, "hammerAction2");
+    const ItemDownClip = AnimClip.findByName(anim, "ItemDown");
 
     if (TopFactoryClip) {
       TopFactoryAction = mixer.clipAction(TopFactoryClip);
@@ -305,48 +296,11 @@ loader.load(
       TopFactoryAction.clampWhenFinished = true;
     }
 
-    const gearRoatateClip = THREE.AnimationClip.findByName(
-      gltf.animations,
-      "gearRotate",
-    );
-    const transportClip = THREE.AnimationClip.findByName(
-      gltf.animations,
-      "transportRotate",
-    );
-    const packetClip1 = THREE.AnimationClip.findByName(
-      gltf.animations,
-      "hammerAction1",
-    );
-    const packetClip2 = THREE.AnimationClip.findByName(
-      gltf.animations,
-      "hammerAction2",
-    );
-
-    const ItemDownClip = THREE.AnimationClip.findByName(
-      gltf.animations,
-      "ItemDown",
-    );
-
     if (gearRoatateClip) mixer.clipAction(gearRoatateClip).play();
-    if (transportClip) {
-      const startTime = Math.min(
-        ...transportClip.tracks.map((track) => track.times[0]),
-      );
-      for (const track of transportClip.tracks) {
-        track.times = track.times.slice();
-        track.shift(-startTime);
-      }
-      transportClip.resetDuration();
-
-      const transportAction = mixer.clipAction(transportClip);
-      transportAction.setLoop(THREE.LoopRepeat, Infinity);
-      transportAction.play();
-    }
-
+    if (transportClip) mixer.clipAction(transportClip).play();
     if (ItemDownClip) mixer.clipAction(ItemDownClip).play();
     if (packetClip1) mixer.clipAction(packetClip1).play();
     if (packetClip2) mixer.clipAction(packetClip2).play();
-    // }
   },
 );
 
@@ -354,9 +308,7 @@ const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let picked_object = null;
 let returningHome = false;
-controls.addEventListener("start", () => {
-  returningHome = false;
-});
+
 renderer.domElement.addEventListener("click", onPick);
 function onPick(e) {
   const r = renderer.domElement.getBoundingClientRect();

@@ -155,7 +155,81 @@ const uniforms = {
   },
 };
 
-const vertexShader = `
+const modelLightDirectionWorld = new THREE.Vector3(0.5, 1.0, 0.5).normalize();
+const modelLightDirection = { value: modelLightDirectionWorld.clone() };
+
+const modelVertexShader = `
+    uniform float uTime;
+
+    uniform mat3 uTextureMatrix;
+
+    varying vec2 vUv;
+    varying vec3 vNormal;
+    #if USE_VERTEX_COLOR
+    attribute vec3 color;
+    varying vec3 vVertexColor;
+    #endif
+
+    void main() {
+      vUv = (uTextureMatrix * vec3(uv, 1.0)).xy;
+
+      vec3 pos = position;
+
+      // pos.z += sin(pos.x * 5.0 + uTime) * 0.1;
+      vNormal = normalize(normalMatrix * normal);
+      #if USE_VERTEX_COLOR
+      vVertexColor = color;
+      #endif
+
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+  `;
+
+const modelFragmentShader = `
+    precision mediump float;
+
+    uniform sampler2D uTexture;
+    uniform bool uHasTexture;
+    uniform bool uTextureIsSRGB;
+    uniform vec3 uColor;
+    uniform vec3 uLightDir;
+    uniform float uAmbient;
+    uniform float uOpacity;
+    uniform float uAlphaTest;
+
+    varying vec2 vUv;
+    varying vec3 vNormal;
+    #if USE_VERTEX_COLOR
+    varying vec3 vVertexColor;
+    #endif
+
+    void main() {
+      vec4 texel = vec4(1.0);
+      if (uHasTexture) {
+        texel = texture2D(uTexture, vUv);
+        if (uTextureIsSRGB) {
+          texel = sRGBTransferEOTF(texel);
+        }
+      }
+
+      vec3 N = normalize(vNormal);
+      vec3 L = normalize(uLightDir);
+      float diffuse = smoothstep(0.15, 0.2, max(dot(N, L), 0.0));
+      vec3 surfaceColor = uColor * texel.rgb;
+      #if USE_VERTEX_COLOR
+      surfaceColor *= vVertexColor;
+      #endif
+      vec4 color = vec4(surfaceColor, uOpacity * texel.a);
+
+      if (color.a < uAlphaTest) discard;
+
+      gl_FragColor = vec4(color.rgb * (diffuse + uAmbient), color.a);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }
+  `;
+
+const floorVertexShader = `
     uniform float uTime;
 
     varying vec2 vUv;
@@ -164,23 +238,17 @@ const vertexShader = `
       vUv = uv;
 
       vec3 pos = position;
-
-      // เริ่มเขียน vertex shader ที่นี่
-      pos.z += sin(pos.x * 5.0 + (uTime*7.0)) * 0.05;
-      // pos.x += sin(pos.z * 5.0 + uTime) * 0.5;
+      pos.z += sin(pos.x * 5.0 + (uTime * 7.0)) * 0.05;
 
       gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
     }
   `;
 
-const fragmentShader = `
+const floorFragmentShader = `
     precision mediump float;
 
-    uniform float uTime;
-
-    varying vec2 vUv;
-
     uniform sampler2D uTexture;
+    varying vec2 vUv;
 
     void main() {
       vec3 color = texture2D(uTexture, vUv).rgb;
@@ -188,11 +256,47 @@ const fragmentShader = `
     }
   `;
 
+const createModelShaderMaterial = (
+  sourceMaterial,
+  hasVertexColors = false,
+  ambient = 0.22,
+) => {
+  const texture = sourceMaterial?.map ?? null;
+  texture?.updateMatrix();
+
+  return new THREE.ShaderMaterial({
+    vertexShader: modelVertexShader,
+    fragmentShader: modelFragmentShader,
+    defines: {
+      USE_VERTEX_COLOR:
+        sourceMaterial?.vertexColors && hasVertexColors ? 1 : 0,
+    },
+    uniforms: {
+      uTime: uniforms.uTime,
+      uTexture: { value: texture },
+      uHasTexture: { value: texture !== null },
+      uTextureIsSRGB: {
+        value: texture?.colorSpace === THREE.SRGBColorSpace,
+      },
+      uTextureMatrix: { value: texture?.matrix ?? new THREE.Matrix3() },
+      uColor: { value: sourceMaterial?.color ?? new THREE.Color(0xffffff) },
+      uLightDir: modelLightDirection,
+      uAmbient: { value: ambient },
+      uOpacity: { value: sourceMaterial?.opacity ?? 1 },
+      uAlphaTest: { value: sourceMaterial?.alphaTest ?? 0 },
+    },
+    side: sourceMaterial?.side ?? THREE.FrontSide,
+    transparent: sourceMaterial?.transparent ?? false,
+    depthWrite: sourceMaterial?.depthWrite ?? true,
+    depthTest: sourceMaterial?.depthTest ?? true,
+  });
+};
+
 // ใช้ segment หลายช่อง เพื่อให้ vertex shader ดัดรูปทรงได้ละเอียด
 // const Planegeometry = new THREE.PlaneGeometry(1.5, 1.5, 32, 32);
 const material = new THREE.ShaderMaterial({
-  vertexShader,
-  fragmentShader,
+  vertexShader: floorVertexShader,
+  fragmentShader: floorFragmentShader,
   uniforms,
   side: THREE.DoubleSide,
 });
@@ -231,6 +335,7 @@ loader.load(
         child.castShadow = false;
         child.receiveShadow = true;
       }
+
       if (child.name == "signLED1") {
         sign1 = child;
         sign1.material = new THREE.MeshBasicMaterial({
@@ -271,6 +376,21 @@ loader.load(
           map: screens.portfoilo,
         });
         can_picking.push(child);
+      }
+
+      if (child.isMesh && child.name.toLowerCase().includes("leaf")) {
+        const sourceMaterials = Array.isArray(child.material)
+          ? child.material
+          : [child.material];
+        const shaderMaterials = sourceMaterials.map((sourceMaterial) =>
+          createModelShaderMaterial(
+            sourceMaterial,
+            child.geometry.hasAttribute("color"),
+          ),
+        );
+        child.material = Array.isArray(child.material)
+          ? shaderMaterials
+          : shaderMaterials[0];
       }
     });
 
@@ -354,6 +474,10 @@ let lastTime = 0;
 
 function animate(time) {
   uniforms.uTime.value = time * 0.001;
+  camera.updateMatrixWorld();
+  modelLightDirection.value
+    .copy(modelLightDirectionWorld)
+    .transformDirection(camera.matrixWorldInverse);
 
   const delta = clock.getDelta();
   if (mixer) mixer.update(delta);
